@@ -249,12 +249,14 @@ static void keypressmod(struct wl_listener *listener, void *data);
 static void killclient(const Arg *arg);
 static void maplayersurfacenotify(struct wl_listener *listener, void *data);
 static void mapnotify(struct wl_listener *listener, void *data);
+static void maximize(const Arg *arg);
 static void maximizeclient(Client *c);
 static void monocle(Monitor *m);
 static void motionabsolute(struct wl_listener *listener, void *data);
 static void motionnotify(uint32_t time);
 static void motionrelative(struct wl_listener *listener, void *data);
 static void moveresize(const Arg *arg);
+static void movetocursor(const Arg *arg);
 static void outputmgrapply(struct wl_listener *listener, void *data);
 static void outputmgrapplyortest(struct wlr_output_configuration_v1 *config, int test);
 static void outputmgrtest(struct wl_listener *listener, void *data);
@@ -279,6 +281,7 @@ static void setmfact(const Arg *arg);
 static void setmon(Client *c, Monitor *m, unsigned int newtags);
 static void setup(void);
 static void sigchld(int unused);
+static void snap(const Arg *arg);
 static void spawn(const Arg *arg);
 static void tag(const Arg *arg);
 static void tagmon(const Arg *arg);
@@ -290,6 +293,8 @@ static void toggleview(const Arg *arg);
 static void unmaplayersurface(LayerSurface *layersurface);
 static void unmaplayersurfacenotify(struct wl_listener *listener, void *data);
 static void unmapnotify(struct wl_listener *listener, void *data);
+static void unmaximize(const Arg *arg);
+static void unmaximizeclient(Client *c);
 static void updatemons();
 static void view(const Arg *arg);
 static void virtualkeyboard(struct wl_listener *listener, void *data);
@@ -465,8 +470,9 @@ applyrules(Client *c)
 		title = broken;
 
 	for (r = rules; r < END(rules); r++) {
-		if ((!r->title || strstr(title, r->title))
-				&& (!r->id || strstr(appid, r->id))) {
+		if (((!r->title || strstr(title, r->title))
+				&& (!r->id || strstr(appid, r->id)))
+				|| strstr("*", r->id)) {
 			c->isfloating = r->isfloating;
 			newtags |= r->tags;
 			i = 0;
@@ -1050,8 +1056,26 @@ togglefullscreen(const Arg *arg)
 }
 
 void
+maximize(const Arg *arg)
+{
+	Client *sel = selclient();
+
+	if (!sel)
+		return;
+	maximizeclient(sel);
+}
+
+void
 maximizeclient(Client *c)
 {
+	// only track the previous position and width if we are not already
+	// maximized.
+	if (c->geom.width < c->mon->m.width && c->geom.height < c->mon->m.height) {
+		c->prevx = c->geom.x;
+		c->prevy = c->geom.y;
+		c->prevwidth = c->geom.width;
+		c->prevheight = c->geom.height;
+	}
 	resize(c, c->mon->m.x, c->mon->m.y, c->mon->m.width, c->mon->m.height, 0);
 	/* used for fullscreen clients */
 }
@@ -1369,6 +1393,7 @@ mapnotify(struct wl_listener *listener, void *data)
 	}
 }
 
+
 void
 monocle(Monitor *m)
 {
@@ -1504,6 +1529,22 @@ moveresize(const Arg *arg)
 		wlr_xcursor_manager_set_cursor_image(cursor_mgr,
 				"bottom_right_corner", cursor);
 		break;
+	}
+}
+
+void
+movetocursor(const Arg *arg)
+{
+	Client *sel = selclient();
+
+	if (!sel)
+		return;
+
+	// only move if we are not maximized or fullscreen.
+	if ((sel->geom.width < sel->mon->m.width
+		&& sel->geom.height < sel->mon->m.height)
+		&& !sel->isfullscreen) {
+		resize(sel, cursor->x, cursor->y, sel->geom.width, sel->geom.height, 0);
 	}
 }
 
@@ -2154,6 +2195,25 @@ sigchld(int unused)
 }
 
 void
+snap(const Arg *arg)
+{
+	Client *sel = selclient();
+
+	if (!sel)
+		return;
+
+	setfloating(sel, 1);
+
+	if (arg->i < 0) {
+		// snap left
+		resize(sel, sel->mon->m.x / 2, sel->mon->m.y, sel->mon->m.width / 2, sel->mon->m.height, 0);
+		return;
+	}
+	// snap right
+	resize(sel, sel->mon->m.x + (sel->mon->m.width / 2), sel->mon->m.y, sel->mon->m.width / 2, sel->mon->m.height, 0);
+}
+
+void
 spawn(const Arg *arg)
 {
 	if (fork() == 0) {
@@ -2284,6 +2344,24 @@ unmapnotify(struct wl_listener *listener, void *data)
 	setmon(c, NULL, 0);
 	wl_list_remove(&c->flink);
 	wl_list_remove(&c->slink);
+}
+
+void
+unmaximize(const Arg *arg)
+{
+	Client *sel = selclient();
+
+	if (!sel)
+		return;
+	unmaximizeclient(sel);
+}
+
+void
+unmaximizeclient(Client *c)
+{
+	if (c->isfullscreen)
+		setfullscreen(c, !c->isfullscreen);
+	resize(c, c->prevx, c->prevy, c->prevwidth, c->prevheight, 0);
 }
 
 void
