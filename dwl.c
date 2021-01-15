@@ -256,7 +256,7 @@ static void motionabsolute(struct wl_listener *listener, void *data);
 static void motionnotify(uint32_t time);
 static void motionrelative(struct wl_listener *listener, void *data);
 static void moveresize(const Arg *arg);
-static void movetocursor(const Arg *arg);
+static void movetocenter(const Arg *arg);
 static void outputmgrapply(struct wl_listener *listener, void *data);
 static void outputmgrapplyortest(struct wlr_output_configuration_v1 *config, int test);
 static void outputmgrtest(struct wl_listener *listener, void *data);
@@ -1533,7 +1533,7 @@ moveresize(const Arg *arg)
 }
 
 void
-movetocursor(const Arg *arg)
+movetocenter(const Arg *arg)
 {
 	Client *sel = selclient();
 
@@ -1544,7 +1544,13 @@ movetocursor(const Arg *arg)
 	if ((sel->geom.width < sel->mon->m.width
 		&& sel->geom.height < sel->mon->m.height)
 		&& !sel->isfullscreen) {
-		resize(sel, cursor->x, cursor->y, sel->geom.width, sel->geom.height, 0);
+		int xoff = sel->geom.width / 2;
+		int yoff = sel->geom.height / 2;
+
+		resize(sel, sel->mon->m.width / 2 - xoff,
+				sel->mon->m.height / 2 - yoff,
+				sel->geom.width,
+				sel->geom.height, 0);
 	}
 }
 
